@@ -14,17 +14,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
-      - name: Install requests
+      - name: Install requirements
         run: pip install requests
 
-      - name: Generate playlist
+      - name: Generate M3U playlist
         run: |
           python <<EOF
           import requests
@@ -41,13 +41,20 @@ jobs:
 
           for e in data:
               name = str(e.get("title", "")).strip()
-              stream = str(e.get("stream", "")).strip()
+
+              # müxtəlif fieldləri yoxla
+              stream = (
+                  str(e.get("stream", "")) or
+                  str(e.get("link", "")) or
+                  str(e.get("url", ""))
+              ).strip()
 
               if not name or not stream:
                   continue
               if not stream.startswith("http"):
                   continue
 
+              # adı təmizlə
               name = name.replace("|", "-").replace("\n", "")
 
               m3u += f'#EXTINF:-1 tvg-id="{count}" group-title="DaddyLive",{name}\n'
@@ -55,8 +62,10 @@ jobs:
 
               count += 1
 
+          # fallback (əgər heç nə yoxdursa)
           if count == 0:
-              m3u += "#EXTINF:-1,No Streams\nhttps://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n"
+              m3u += "#EXTINF:-1,No Live Events (Test Channel)\n"
+              m3u += "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n"
 
           with open("playlist.m3u", "w", encoding="utf-8") as f:
               f.write(m3u)
