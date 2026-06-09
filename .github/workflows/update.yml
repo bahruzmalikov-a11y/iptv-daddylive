@@ -1,4 +1,4 @@
-name: DaddyLive IPTV Update
+name: Full IPTV System
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -21,61 +21,58 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install requirements
+      - name: Install deps
         run: pip install requests
 
-      - name: Generate M3U playlist
+      - name: Build playlist
         run: |
           python <<EOF
           import requests
 
-          url = "https://daddylive.org/api/events"
-
-          try:
-              data = requests.get(url, timeout=10).json()
-          except:
-              data = []
-
           m3u = "#EXTM3U\n\n"
           count = 0
 
+          # ✅ 1. DaddyLive
+          try:
+              data = requests.get("https://daddylive.org/api/events", timeout=10).json()
+          except:
+              data = []
+
           for e in data:
               name = str(e.get("title", "")).strip()
-
-              # müxtəlif fieldləri yoxla
               stream = (
                   str(e.get("stream", "")) or
                   str(e.get("link", "")) or
                   str(e.get("url", ""))
               ).strip()
 
-              if not name or not stream:
-                  continue
-              if not stream.startswith("http"):
-                  continue
+              if name and stream.startswith("http"):
+                  m3u += f'#EXTINF:-1 group-title="DaddyLive",{name}\n'
+                  m3u += f"{stream}\n\n"
+                  count += 1
 
-              # adı təmizlə
-              name = name.replace("|", "-").replace("\n", "")
-
-              m3u += f'#EXTINF:-1 tvg-id="{count}" group-title="DaddyLive",{name}\n'
-              m3u += f"{stream}\n\n"
-
-              count += 1
-
-          # fallback (əgər heç nə yoxdursa)
+          # ✅ 2. Əgər DaddyLive boşdursa → Backup IPTV
           if count == 0:
-              m3u += "#EXTINF:-1,No Live Events (Test Channel)\n"
-              m3u += "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n"
+              try:
+                  backup = requests.get("https://iptv-org.github.io/iptv/categories/sports.m3u", timeout=10).text
+                  m3u += backup
+              except:
+                  pass
+
+          # ✅ 3. Minimum fallback
+          if "#EXTINF" not in m3u:
+              m3u += "#EXTINF:-1 group-title=\"Backup\",Test Channel\n"
+              m3u += "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n\n"
 
           with open("playlist.m3u", "w", encoding="utf-8") as f:
               f.write(m3u)
           EOF
 
-      - name: Commit and push
+      - name: Commit
         run: |
           git config --global user.name "iptv-bot"
           git config --global user.email "bot@github.com"
 
           git add playlist.m3u
-          git commit -m "Auto update playlist" || echo "No changes"
+          git commit -m "Full IPTV update" || echo "No changes"
           git push
