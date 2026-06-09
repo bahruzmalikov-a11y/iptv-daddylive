@@ -38,13 +38,8 @@ jobs:
 
           def extract_streams(html):
               streams = []
-
-              # m3u8 tap
               streams += re.findall(r"https[^\"']+\.m3u8", html)
-
-              # mpd (dash)
               streams += re.findall(r"https[^\"']+\.mpd", html)
-
               return list(set(streams))
 
           try:
@@ -55,7 +50,7 @@ jobs:
 
               for a in soup.find_all("a", href=True):
                   href = a["href"]
-                  if "stream-" in href:
+                  if "stream" in href:
                       links.append("https://dlhd.pk" + href)
 
               links = list(set(links))[:20]
@@ -84,7 +79,8 @@ jobs:
                           name = link.split("/")[-1]
 
                           m3u += f'#EXTINF:-1 group-title="DLHD",{name}\n'
-                          m3u += f"{stream}\n\n'
+                          m3u += f"{stream}\n\n"
+
                           count += 1
 
                   except:
