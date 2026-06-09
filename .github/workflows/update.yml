@@ -13,56 +13,77 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
-      - run: pip install requests beautifulsoup4
+      - name: Install packages
+        run: pip install requests beautifulsoup4
 
       - name: Scrape DaddyLive
         run: |
-          python <True):              if "/stream/" in a["href"]:
-                  links.append("https://daddylive.org" + a["href"])
+          python << 'EOF'
+          import requests
+          from bs4 import BeautifulSoup
+          import re
 
-          # unikallaşdır
-          links = list(set(links))[:10]
+          headers = {"User-Agent": "Mozilla/5.0"}
 
-          # 3. Hər linkdən stream tapmağa çalış
-          for link in links:
-              try:
-                  page = requests.get(link, headers=headers).text
+          m3u = "#EXTM3U\n\n"
+          count = 0
 
-                  # m3u8 tap
-                  m3u8 = re.findall(r"https.*?\.m3u8", page)
+          try:
+              home = requests.get("https://daddylive.org/", headers=headers, timeout=10).text
+              soup = BeautifulSoup(home, "html.parser")
 
-                  if m3u8:
-                      stream = m3u8[0]
-                      name = link.split("/")[-1]
+              links = []
 
-                      m3u += f'#EXTINF:-1 group-title="DaddyLive",{name}\n'
-                      m3u += f"{stream}\n\n"
+              # stream linklərini tap
+              for a in soup.find_all("a", href=True):
+                  href = a["href"]
+                  if "/stream/" in href:
+                      full = "https://daddylive.org" + href
+                      links.append(full)
 
-                      count += 1
+              # duplicate sil + limit
+              links = list(set(links))[:10]
 
-              except:
-                  continue
+              for link in links:
+                  try:
+                      page = requests.get(link, headers=headers, timeout=10).text
+                      matches = re.findall(r"https.*?\.m3u8", page)
+
+                      if matches:
+                          stream = matches[0]
+                          name = link.split("/")[-1]
+
+                          m3u += f'#EXTINF:-1 group-title="DaddyLive",{name}\n'
+                          m3u += f"{stream}\n\n"
+                          count += 1
+                  except:
+                      continue
+
+          except:
+              pass
 
           # fallback
           if count == 0:
               m3u += "#EXTINF:-1,No Streams Found\n"
               m3u += "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n"
 
-          with open("playlist.m3u", "w") as f:
+          with open("playlist.m3u", "w", encoding="utf-8") as f:
               f.write(m3u)
           EOF
 
-      - name: Commit
+      - name: Commit & Push
         run: |
           git config --global user.name "iptv-bot"
           git config --global user.email "bot@github.com"
 
           git add playlist.m3u
-          git commit -m "Scraped IPTV update" || echo "No changes"
+          git commit -m "Scraped update" || echo "No changes"
           git push
