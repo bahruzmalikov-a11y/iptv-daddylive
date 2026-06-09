@@ -1,9 +1,9 @@
-name: DaddyLive Only IPTV
+name: DaddyLive Scraper IPTV
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/15 * * * *"
 
 jobs:
   build:
@@ -13,51 +13,48 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
-      - name: Install deps
-        run: pip install requests
+      - run: pip install requests beautifulsoup4
 
-      - name: Generate DaddyLive playlist
+      - name: Scrape DaddyLive
         run: |
-          python <<EOF
-          import requests
+          python <True):              if "/stream/" in a["href"]:
+                  links.append("https://daddylive.org" + a["href"])
 
-          m3u = "#EXTM3U\n\n"
+          # unikallaşdır
+          links = list(set(links))[:10]
 
-          try:
-              events = requests.get("https://daddylive.org/api/events", timeout=10).json()
-          except:
-              events = []
+          # 3. Hər linkdən stream tapmağa çalış
+          for link in links:
+              try:
+                  page = requests.get(link, headers=headers).text
 
-          count = 0
+                  # m3u8 tap
+                  m3u8 = re.findall(r"https.*?\.m3u8", page)
 
-          for e in events:
-              name = str(e.get("title", "")).strip()
+                  if m3u8:
+                      stream = m3u8[0]
+                      name = link.split("/")[-1]
 
-              stream = (
-                  str(e.get("stream", "")) or
-                  str(e.get("link", "")) or
-                  str(e.get("url", ""))
-              ).strip()
+                      m3u += f'#EXTINF:-1 group-title="DaddyLive",{name}\n'
+                      m3u += f"{stream}\n\n"
 
-              if name and stream.startswith("http"):
-                  m3u += f'#EXTINF:-1 group-title="DaddyLive",{name}\n'
-                  m3u += f"{stream}\n\n"
-                  count += 1
+                      count += 1
 
-          # Əgər heç stream tapılmasa
+              except:
+                  continue
+
+          # fallback
           if count == 0:
-              m3u += "#EXTINF:-1,DaddyLive (No Streams Available)\n"
-              m3u += "about:blank\n"
+              m3u += "#EXTINF:-1,No Streams Found\n"
+              m3u += "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n"
 
-          with open("playlist.m3u", "w", encoding="utf-8") as f:
+          with open("playlist.m3u", "w") as f:
               f.write(m3u)
           EOF
 
@@ -67,5 +64,5 @@ jobs:
           git config --global user.email "bot@github.com"
 
           git add playlist.m3u
-          git commit -m "DaddyLive update" || echo "No changes"
+          git commit -m "Scraped IPTV update" || echo "No changes"
           git push
