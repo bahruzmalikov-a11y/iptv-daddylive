@@ -1,4 +1,4 @@
-name: DLHD IPTV Scraper
+name: DLHD PRO IPTV
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ jobs:
       - name: Install deps
         run: pip install requests beautifulsoup4
 
-      - name: Scrape DLHD
+      - name: Run scraper
         run: |
           python << 'EOF'
           import requests
@@ -36,54 +36,77 @@ jobs:
           m3u = "#EXTM3U\n\n"
           count = 0
 
+          def extract_streams(html):
+              streams = []
+
+              # m3u8 tap
+              streams += re.findall(r"https[^\"']+\.m3u8", html)
+
+              # mpd (dash)
+              streams += re.findall(r"https[^\"']+\.mpd", html)
+
+              return list(set(streams))
+
           try:
-              html = requests.get("https://dlhd.pk/", headers=headers, timeout=10).text
-              soup = BeautifulSoup(html, "html.parser")
+              main = requests.get("https://dlhd.pk/", headers=headers, timeout=10).text
+              soup = BeautifulSoup(main, "html.parser")
 
               links = []
 
-              # kanal linklərini tap
               for a in soup.find_all("a", href=True):
                   href = a["href"]
                   if "stream-" in href:
-                      full = "https://dlhd.pk" + href
-                      links.append(full)
+                      links.append("https://dlhd.pk" + href)
 
-              links = list(set(links))[:15]
+              links = list(set(links))[:20]
 
               for link in links:
                   try:
                       page = requests.get(link, headers=headers, timeout=10).text
 
-                      # m3u8 tap
-                      streams = re.findall(r"https.*?\.m3u8", page)
+                      found = extract_streams(page)
 
-                      if streams:
-                          stream = streams[0]
+                      # iframe yoxla
+                      soup2 = BeautifulSoup(page, "html.parser")
+                      iframe = soup2.find("iframe")
+
+                      if iframe and iframe.get("src"):
+                          try:
+                              iframe_html = requests.get(iframe["src"], headers=headers, timeout=10).text
+                              found += extract_streams(iframe_html)
+                          except:
+                              pass
+
+                      found = list(set(found))
+
+                      if found:
+                          stream = found[0]
                           name = link.split("/")[-1]
 
                           m3u += f'#EXTINF:-1 group-title="DLHD",{name}\n'
-                          m3u += f"{stream}\n\n"
+                          m3u += f"{stream}\n\n'
                           count += 1
+
                   except:
                       continue
 
           except:
               pass
 
+          # fallback
           if count == 0:
               m3u += "#EXTINF:-1,No DLHD Streams\n"
-              m3u += "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n"
+              m3u += "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n\n"
 
           with open("playlist.m3u", "w", encoding="utf-8") as f:
               f.write(m3u)
           EOF
 
-      - name: Commit & push
+      - name: Commit & Push
         run: |
           git config --global user.name "iptv-bot"
           git config --global user.email "bot@github.com"
 
           git add playlist.m3u
-          git commit -m "DLHD update" || echo "No changes"
+          git commit -m "DLHD PRO update" || echo "No changes"
           git push
