@@ -1,16 +1,19 @@
 name: DaddyLive IPTV Update
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"   # hər 5 dəqiqə
   workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Setup Python
@@ -18,30 +21,33 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Generate M3U
-        run: |
-          pip install requests
+      - name: Install requests
+        run: pip install requests
 
+      - name: Generate playlist
+        run: |
           python <<EOF
           import requests
 
           url = "https://daddylive.org/api/events"
-          data = requests.get(url, timeout=10).json()
+
+          try:
+              data = requests.get(url, timeout=10).json()
+          except:
+              data = []
 
           m3u = "#EXTM3U\n\n"
           count = 0
 
           for e in data:
-              name = e.get("title", "").strip()
-              stream = e.get("stream", "").strip()
+              name = str(e.get("title", "")).strip()
+              stream = str(e.get("stream", "")).strip()
 
-              # Filter
               if not name or not stream:
                   continue
               if not stream.startswith("http"):
                   continue
 
-              # Clean name
               name = name.replace("|", "-").replace("\n", "")
 
               m3u += f'#EXTINF:-1 tvg-id="{count}" group-title="DaddyLive",{name}\n'
@@ -50,16 +56,17 @@ jobs:
               count += 1
 
           if count == 0:
-              m3u += "#EXTINF:-1,No Streams Available\nhttps://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n"
+              m3u += "#EXTINF:-1,No Streams\nhttps://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n"
 
           with open("playlist.m3u", "w", encoding="utf-8") as f:
               f.write(m3u)
           EOF
 
-      - name: Commit & Push
+      - name: Commit and push
         run: |
           git config --global user.name "iptv-bot"
           git config --global user.email "bot@github.com"
+
           git add playlist.m3u
           git commit -m "Auto update playlist" || echo "No changes"
           git push
