@@ -1,4 +1,4 @@
-name: DaddyLive Scraper IPTV
+name: DLHD IPTV Scraper
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -21,10 +21,10 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install packages
+      - name: Install deps
         run: pip install requests beautifulsoup4
 
-      - name: Scrape DaddyLive
+      - name: Scrape DLHD
         run: |
           python << 'EOF'
           import requests
@@ -37,31 +37,32 @@ jobs:
           count = 0
 
           try:
-              home = requests.get("https://daddylive.org/", headers=headers, timeout=10).text
-              soup = BeautifulSoup(home, "html.parser")
+              html = requests.get("https://dlhd.pk/", headers=headers, timeout=10).text
+              soup = BeautifulSoup(html, "html.parser")
 
               links = []
 
-              # stream linklərini tap
+              # kanal linklərini tap
               for a in soup.find_all("a", href=True):
                   href = a["href"]
-                  if "/stream/" in href:
-                      full = "https://daddylive.org" + href
+                  if "stream-" in href:
+                      full = "https://dlhd.pk" + href
                       links.append(full)
 
-              # duplicate sil + limit
-              links = list(set(links))[:10]
+              links = list(set(links))[:15]
 
               for link in links:
                   try:
                       page = requests.get(link, headers=headers, timeout=10).text
-                      matches = re.findall(r"https.*?\.m3u8", page)
 
-                      if matches:
-                          stream = matches[0]
+                      # m3u8 tap
+                      streams = re.findall(r"https.*?\.m3u8", page)
+
+                      if streams:
+                          stream = streams[0]
                           name = link.split("/")[-1]
 
-                          m3u += f'#EXTINF:-1 group-title="DaddyLive",{name}\n'
+                          m3u += f'#EXTINF:-1 group-title="DLHD",{name}\n'
                           m3u += f"{stream}\n\n"
                           count += 1
                   except:
@@ -70,20 +71,19 @@ jobs:
           except:
               pass
 
-          # fallback
           if count == 0:
-              m3u += "#EXTINF:-1,No Streams Found\n"
+              m3u += "#EXTINF:-1,No DLHD Streams\n"
               m3u += "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8\n"
 
           with open("playlist.m3u", "w", encoding="utf-8") as f:
               f.write(m3u)
           EOF
 
-      - name: Commit & Push
+      - name: Commit & push
         run: |
           git config --global user.name "iptv-bot"
           git config --global user.email "bot@github.com"
 
           git add playlist.m3u
-          git commit -m "Scraped update" || echo "No changes"
+          git commit -m "DLHD update" || echo "No changes"
           git push
